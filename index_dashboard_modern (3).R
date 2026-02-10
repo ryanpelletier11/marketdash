@@ -171,7 +171,12 @@ ui <- dashboardPage(
   body = dashboardBody(
     tags$head(
       tags$style(HTML("
-        /* Navy theme styling */
+        /* ===== Global Font ===== */
+        body, .content-wrapper, .main-sidebar {
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        /* ===== Navbar ===== */
         .main-header .navbar {
           background-color: #000080 !important;
         }
@@ -182,22 +187,131 @@ ui <- dashboardPage(
         .brand-link:hover {
           color: #a8c5dd !important;
         }
-        /* Card headers */
-        .card-primary:not(.card-outline) > .card-header {
+
+        /* ===== Uniform Card Headers (all navy) ===== */
+        .card[class*='card-']:not(.card-outline) > .card-header {
           background-color: #000080 !important;
           color: #fff !important;
+          border-bottom: none;
+          font-weight: 600;
+          font-size: 14px;
+          letter-spacing: 0.3px;
         }
-        .card-success:not(.card-outline) > .card-header {
-          background-color: #28a745 !important;
+        .card[class*='card-']:not(.card-outline) > .card-header .card-title {
           color: #fff !important;
         }
-        .card-info:not(.card-outline) > .card-header {
-          background-color: #17a2b8 !important;
+        .card[class*='card-']:not(.card-outline) > .card-header .btn {
           color: #fff !important;
         }
-        .card-warning:not(.card-outline) > .card-header {
-          background-color: #ffc107 !important;
-          color: #000 !important;
+
+        /* ===== Card Body ===== */
+        .card {
+          border: none;
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+          transition: box-shadow 0.2s ease;
+        }
+        .card:hover {
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        }
+
+        /* ===== Value Boxes (KPIs) ===== */
+        .small-box {
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+          transition: transform 0.15s ease, box-shadow 0.15s ease;
+          border: none;
+        }
+        .small-box:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+        }
+        .small-box h3, .small-box .small-box-header {
+          font-size: 28px;
+          font-weight: 700;
+          letter-spacing: -0.5px;
+          color: #fff !important;
+        }
+        .small-box p, .small-box .small-box-footer {
+          font-size: 13px;
+          font-weight: 500;
+          color: rgba(255, 255, 255, 0.9) !important;
+          letter-spacing: 0.2px;
+        }
+        .small-box .icon {
+          color: rgba(255, 255, 255, 0.25) !important;
+          font-size: 60px;
+        }
+        .small-box .inner {
+          padding: 15px 15px 10px 15px;
+        }
+        /* Consistent navy background for all value boxes */
+        .small-box.bg-success,
+        .small-box.bg-danger,
+        .small-box.bg-primary,
+        .small-box.bg-info {
+          background: linear-gradient(135deg, #000080 0%, #0033a0 100%) !important;
+        }
+        .small-box > .small-box-footer {
+          background: rgba(0, 0, 0, 0.15) !important;
+          color: rgba(255, 255, 255, 0.85) !important;
+        }
+        .small-box > .small-box-footer:hover {
+          color: #fff !important;
+        }
+
+        /* ===== Reactable Table Hover ===== */
+        .rt-tr:hover .rt-td {
+          background-color: #f0f4ff !important;
+          color: #1a1a2e !important;
+        }
+        .rt-tr-group:hover {
+          background-color: #f0f4ff !important;
+        }
+        .rt-tr-group:hover .rt-td {
+          color: #1a1a2e !important;
+        }
+
+        /* ===== Sidebar Buttons ===== */
+        .btn-success.btn-block {
+          background-color: #0066cc !important;
+          border-color: #0055aa !important;
+          border-radius: 6px;
+          font-weight: 600;
+          font-size: 13px;
+          letter-spacing: 0.3px;
+        }
+        .btn-success.btn-block:hover {
+          background-color: #0055aa !important;
+        }
+        .btn-primary.btn-block {
+          background-color: #000080 !important;
+          border-color: #000066 !important;
+          border-radius: 6px;
+          font-weight: 600;
+          font-size: 13px;
+          letter-spacing: 0.3px;
+        }
+        .btn-primary.btn-block:hover {
+          background-color: #000066 !important;
+        }
+
+        /* ===== Sidebar Polish ===== */
+        .sidebar .nav-link {
+          font-size: 13.5px;
+          font-weight: 500;
+          letter-spacing: 0.2px;
+        }
+
+        /* ===== Modal ===== */
+        .modal-header {
+          background-color: #000080;
+          color: #fff;
+          border-radius: 4px 4px 0 0;
+        }
+        .modal-title {
+          font-weight: 600;
+          letter-spacing: 0.3px;
         }
       "))
     ),
@@ -221,7 +335,7 @@ ui <- dashboardPage(
           ),
           bs4Card(
             title = "Top 10 Performers (YTD)",
-            status = "success",
+            status = "primary",
             solidHeader = TRUE,
             width = 6,
             echarts4rOutput("top_performers_chart", height = "350px")
@@ -230,7 +344,7 @@ ui <- dashboardPage(
         fluidRow(
           bs4Card(
             title = "Asset Class Performance",
-            status = "info",
+            status = "primary",
             solidHeader = TRUE,
             width = 12,
             echarts4rOutput("asset_class_chart", height = "350px")
@@ -284,7 +398,7 @@ ui <- dashboardPage(
           ),
           bs4Card(
             title = "Return vs Volatility",
-            status = "info",
+            status = "primary",
             solidHeader = TRUE,
             width = 6,
             maximizable = TRUE,
@@ -303,7 +417,7 @@ ui <- dashboardPage(
         fluidRow(
           bs4Card(
             title = "Price History (1 Year)",
-            status = "success",
+            status = "primary",
             solidHeader = TRUE,
             width = 12,
             maximizable = TRUE,
@@ -313,7 +427,7 @@ ui <- dashboardPage(
         fluidRow(
           bs4Card(
             title = "Return Scatter Plot",
-            status = "warning",
+            status = "primary",
             solidHeader = TRUE,
             width = 12,
             maximizable = TRUE,
@@ -392,7 +506,7 @@ ui <- dashboardPage(
         fluidRow(
           bs4Card(
             title = "RSI (14)",
-            status = "info",
+            status = "primary",
             solidHeader = TRUE,
             width = 12,
             maximizable = TRUE,
@@ -402,7 +516,7 @@ ui <- dashboardPage(
         fluidRow(
           bs4Card(
             title = "Technical Scorecard - All Tickers",
-            status = "success",
+            status = "primary",
             solidHeader = TRUE,
             width = 12,
             maximizable = TRUE,
@@ -427,7 +541,7 @@ ui <- dashboardPage(
         fluidRow(
           bs4Card(
             title = "US Treasury Yield Curve",
-            status = "info",
+            status = "primary",
             solidHeader = TRUE,
             width = 8,
             maximizable = TRUE,
@@ -435,7 +549,7 @@ ui <- dashboardPage(
           ),
           bs4Card(
             title = "Yield Curve Data",
-            status = "success",
+            status = "primary",
             solidHeader = TRUE,
             width = 4,
             reactableOutput("yield_curve_table")
@@ -444,7 +558,7 @@ ui <- dashboardPage(
         fluidRow(
           bs4Card(
             title = "Credit Spreads",
-            status = "warning",
+            status = "primary",
             solidHeader = TRUE,
             width = 6,
             maximizable = TRUE,
@@ -452,7 +566,7 @@ ui <- dashboardPage(
           ),
           bs4Card(
             title = "Credit Spread Data",
-            status = "secondary",
+            status = "primary",
             solidHeader = TRUE,
             width = 6,
             reactableOutput("credit_spreads_table")
@@ -1071,53 +1185,53 @@ server <- function(input, output, session) {
   # Value Boxes
   output$best_performer <- renderValueBox({
     req(nrow(filtered_data()) > 0)
-    
+
     best <- filtered_data() %>%
       slice_max(YTD, n = 1)
-    
+
     valueBox(
       value = paste0(round(best$YTD, 2), "%"),
-      subtitle = paste("Best Performer:", best$Index),
+      subtitle = paste("Best YTD:", best$Index),
       icon = icon("arrow-up"),
-      color = "success"
+      color = "primary"
     )
   })
-  
+
   output$worst_performer <- renderValueBox({
     req(nrow(filtered_data()) > 0)
-    
+
     worst <- filtered_data() %>%
       slice_min(YTD, n = 1)
-    
+
     valueBox(
       value = paste0(round(worst$YTD, 2), "%"),
-      subtitle = paste("Worst Performer:", worst$Index),
+      subtitle = paste("Worst YTD:", worst$Index),
       icon = icon("arrow-down"),
-      color = "danger"
+      color = "primary"
     )
   })
-  
+
   output$avg_return <- renderValueBox({
     req(nrow(filtered_data()) > 0)
-    
+
     avg <- mean(filtered_data()$YTD, na.rm = TRUE)
-    
+
     valueBox(
       value = paste0(round(avg, 2), "%"),
-      subtitle = "Average YTD Return",
+      subtitle = "Avg YTD Return",
       icon = icon("chart-bar"),
       color = "primary"
     )
   })
-  
+
   output$total_indices <- renderValueBox({
     req(nrow(filtered_data()) > 0)
-    
+
     valueBox(
       value = nrow(filtered_data()),
-      subtitle = "Total Indices",
+      subtitle = "Total Indices Tracked",
       icon = icon("list"),
-      color = "info"
+      color = "primary"
     )
   })
   
