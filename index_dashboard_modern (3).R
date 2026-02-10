@@ -103,9 +103,9 @@ ui <- dashboardPage(
         icon = icon("chart-line")
       ),
       menuItem(
-        "Heatmap",
-        tabName = "heatmap",
-        icon = icon("th")
+        "Technical Analysis",
+        tabName = "technical",
+        icon = icon("chart-area")
       ),
       menuItem(
         "Economic Data",
@@ -340,30 +340,74 @@ ui <- dashboardPage(
         )
       ),
       
-      # Heatmap Tab
+      # Technical Analysis Tab
       tabItem(
-        tabName = "heatmap",
+        tabName = "technical",
         fluidRow(
           bs4Card(
             width = 12,
             status = "primary",
-            selectInput("heatmap_period", 
-                       "Select Period:", 
-                       choices = c("1 Day", "1 Week", "MTD", "QTD", 
-                                 "3 Month", "6 Month", "YTD", "1 Year", 
-                                 "2 Year", "3 Year"),
-                       selected = "YTD",
-                       width = "100%")
+            fluidRow(
+              column(4,
+                pickerInput("ta_ticker",
+                            "Select Ticker:",
+                            choices = NULL,
+                            multiple = FALSE,
+                            options = list(`live-search` = TRUE))
+              ),
+              column(4,
+                selectInput("ta_period",
+                            "Lookback Period:",
+                            choices = c("3 Months" = "3m",
+                                        "6 Months" = "6m",
+                                        "1 Year" = "1y",
+                                        "2 Years" = "2y",
+                                        "All" = "all"),
+                            selected = "1y")
+              ),
+              column(4,
+                pickerInput("ta_overlays",
+                            "Chart Overlays:",
+                            choices = c("SMA 20" = "sma20",
+                                        "SMA 50" = "sma50",
+                                        "SMA 200" = "sma200",
+                                        "Bollinger Bands" = "bbands"),
+                            selected = c("sma50", "sma200"),
+                            multiple = TRUE,
+                            options = list(`actions-box` = TRUE))
+              )
+            )
           )
         ),
         fluidRow(
           bs4Card(
-            title = "Returns Heatmap",
-            status = "warning",
+            title = "Price Chart with Moving Averages",
+            status = "primary",
             solidHeader = TRUE,
             width = 12,
             maximizable = TRUE,
-            echarts4rOutput("heatmap", height = "700px")
+            echarts4rOutput("ta_price_chart", height = "450px")
+          )
+        ),
+        fluidRow(
+          bs4Card(
+            title = "RSI (14)",
+            status = "info",
+            solidHeader = TRUE,
+            width = 12,
+            maximizable = TRUE,
+            echarts4rOutput("ta_rsi_chart", height = "200px")
+          )
+        ),
+        fluidRow(
+          bs4Card(
+            title = "Technical Scorecard - All Tickers",
+            status = "success",
+            solidHeader = TRUE,
+            width = 12,
+            maximizable = TRUE,
+            closable = FALSE,
+            reactableOutput("ta_scorecard_table")
           )
         )
       ),
@@ -1499,50 +1543,307 @@ server <- function(input, output, session) {
     chart
   })
   
-  # Heatmap
-  output$heatmap <- renderEcharts4r({
-    req(input$heatmap_period)
+  # ========== TECHNICAL ANALYSIS ==========
+
+  # Update TA ticker dropdown when data changes
+  observe({
     req(nrow(filtered_data()) > 0)
-    
-    data <- filtered_data() %>%
-      select(Index, Asset_Class, all_of(input$heatmap_period)) %>%
-      arrange(Asset_Class, Index) %>%
-      mutate(row_id = row_number() - 1)
-    
-    heatmap_data <- data.frame(
-      x = 0,
-      y = data$row_id,
-      value = data[[input$heatmap_period]],
-      Index = data$Index
+    choices <- filtered_data()$Index
+    updatePickerInput(session, "ta_ticker", choices = choices, selected = choices[1])
+  })
+
+  # Helper: compute SMA for a vector
+  calc_sma <- function(x, n) {
+    if (length(x) < n) return(rep(NA_real_, length(x)))
+    stats::filter(x, rep(1/n, n), sides = 1) |> as.numeric()
+  }
+
+  # Helper: compute RSI
+  calc_rsi <- function(price, n = 14) {
+    delta <- diff(price)
+    gain <- ifelse(delta > 0, delta, 0)
+    loss <- ifelse(delta < 0, -delta, 0)
+
+    avg_gain <- rep(NA_real_, length(price))
+    avg_loss <- rep(NA_real_, length(price))
+
+    if (length(gain) < n) return(rep(NA_real_, length(price)))
+
+    avg_gain[n + 1] <- mean(gain[1:n])
+    avg_loss[n + 1] <- mean(loss[1:n])
+
+    for (i in (n + 1):length(gain)) {
+      if (i == n) next
+      avg_gain[i + 1] <- (avg_gain[i] * (n - 1) + gain[i]) / n
+      avg_loss[i + 1] <- (avg_loss[i] * (n - 1) + loss[i]) / n
+    }
+
+    rs <- avg_gain / avg_loss
+    rsi <- 100 - (100 / (1 + rs))
+    rsi
+  }
+
+  # Reactive: prepare TA data for selected ticker
+  ta_data <- reactive({
+    req(input$ta_ticker)
+    data <- index_data() %>%
+      filter(Index == input$ta_ticker, Date <= input$as_of_date) %>%
+      arrange(Date)
+    req(nrow(data) > 20)
+
+    # Filter by lookback period
+    cutoff <- switch(input$ta_period,
+      "3m" = input$as_of_date - months(3),
+      "6m" = input$as_of_date - months(6),
+      "1y" = input$as_of_date - years(1),
+      "2y" = input$as_of_date - years(2),
+      "all" = as.Date("2000-01-01")
     )
-    
-    heatmap_data %>%
-      e_charts(y) %>%
-      e_heatmap(x, value) %>%
-      e_visual_map(
-        value,
-        inRange = list(color = c(nepc_pal("Dark Grey"), 
-                                 nepc_pal("Grey Text"), 
-                                 nepc_pal("Light Grey"), 
-                                 nepc_pal("Sky Blue"), 
-                                 nepc_pal("Key Lime"))),
-        min = min(heatmap_data$value, na.rm = TRUE),
-        max = max(heatmap_data$value, na.rm = TRUE)
-      ) %>%
-      e_y_axis(
-        type = "category",
-        data = data$Index,
-        axisLabel = list(interval = 0)
-      ) %>%
-      e_x_axis(show = FALSE) %>%
-      e_tooltip(
-        formatter = htmlwidgets::JS("
-          function(params){
-            return params.name + '<br/>' + 
-                   'Return: ' + params.value[2].toFixed(2) + '%';
-          }
-        ")
+
+    # Calculate indicators on full history, then filter display range
+    full <- data %>%
+      mutate(
+        SMA20  = calc_sma(Price, 20),
+        SMA50  = calc_sma(Price, 50),
+        SMA200 = calc_sma(Price, 200),
+        RSI    = calc_rsi(Price, 14)
       )
+
+    # Bollinger Bands (20-day, 2 std dev)
+    full$BB_Mid <- full$SMA20
+    roll_sd <- rep(NA_real_, nrow(full))
+    for (j in 20:nrow(full)) {
+      roll_sd[j] <- sd(full$Price[(j-19):j])
+    }
+    full$BB_Upper <- full$SMA20 + 2 * roll_sd
+    full$BB_Lower <- full$SMA20 - 2 * roll_sd
+
+    full %>% filter(Date >= cutoff)
+  })
+
+  # TA Price Chart with Moving Averages
+  output$ta_price_chart <- renderEcharts4r({
+    data <- ta_data()
+    req(nrow(data) > 0)
+
+    chart <- data %>%
+      e_charts(Date) %>%
+      e_line(Price, name = input$ta_ticker, smooth = FALSE,
+             symbol = "none", lineStyle = list(width = 2)) %>%
+      e_color(nepc_pal("NEPC Blue"))
+
+    overlays <- input$ta_overlays
+    overlay_colors <- c()
+
+    if ("sma20" %in% overlays) {
+      chart <- chart %>% e_line(SMA20, name = "SMA 20", smooth = FALSE,
+                                 symbol = "none", lineStyle = list(width = 1.5, type = "dashed"))
+      overlay_colors <- c(overlay_colors, nepc_pal("Key Lime"))
+    }
+    if ("sma50" %in% overlays) {
+      chart <- chart %>% e_line(SMA50, name = "SMA 50", smooth = FALSE,
+                                 symbol = "none", lineStyle = list(width = 1.5, type = "dashed"))
+      overlay_colors <- c(overlay_colors, nepc_pal("Custard"))
+    }
+    if ("sma200" %in% overlays) {
+      chart <- chart %>% e_line(SMA200, name = "SMA 200", smooth = FALSE,
+                                 symbol = "none", lineStyle = list(width = 1.5, type = "dashed"))
+      overlay_colors <- c(overlay_colors, nepc_pal("Middle Blue"))
+    }
+    if ("bbands" %in% overlays) {
+      chart <- chart %>%
+        e_line(BB_Upper, name = "BB Upper", smooth = FALSE,
+               symbol = "none", lineStyle = list(width = 1, type = "dotted")) %>%
+        e_line(BB_Lower, name = "BB Lower", smooth = FALSE,
+               symbol = "none", lineStyle = list(width = 1, type = "dotted"))
+      overlay_colors <- c(overlay_colors, nepc_pal("Light Grey"), nepc_pal("Light Grey"))
+    }
+
+    chart %>%
+      e_color(c(nepc_pal("NEPC Blue"), overlay_colors)) %>%
+      e_tooltip(trigger = "axis") %>%
+      e_datazoom(type = "slider") %>%
+      e_y_axis(name = "Price", nameLocation = "center", nameGap = 60,
+               scale = TRUE) %>%
+      e_legend(top = "top") %>%
+      e_toolbox_feature(feature = "dataZoom") %>%
+      e_toolbox_feature(feature = "restore")
+  })
+
+  # RSI Chart
+  output$ta_rsi_chart <- renderEcharts4r({
+    data <- ta_data()
+    req(nrow(data) > 0)
+
+    data %>%
+      e_charts(Date) %>%
+      e_line(RSI, name = "RSI (14)", smooth = FALSE,
+             symbol = "none", lineStyle = list(width = 1.5)) %>%
+      e_color(nepc_pal("Middle Blue")) %>%
+      e_mark_line(
+        data = list(list(yAxis = 70, name = "Overbought"),
+                    list(yAxis = 30, name = "Oversold")),
+        lineStyle = list(type = "dashed", color = "#dc3545"),
+        label = list(show = TRUE, position = "end"),
+        silent = TRUE
+      ) %>%
+      e_y_axis(name = "RSI", min = 0, max = 100,
+               nameLocation = "center", nameGap = 35) %>%
+      e_tooltip(trigger = "axis") %>%
+      e_datazoom(type = "slider") %>%
+      e_legend(show = FALSE)
+  })
+
+  # Technical Scorecard Table
+  output$ta_scorecard_table <- renderReactable({
+    data <- index_data()
+    req(nrow(data) > 0)
+
+    as_of <- input$as_of_date
+    config <- ticker_config()
+
+    scorecard <- map_dfr(unique(data$Index), function(idx) {
+      idx_data <- data %>%
+        filter(Index == idx, Date <= as_of) %>%
+        arrange(Date)
+
+      if (nrow(idx_data) < 200) {
+        n <- nrow(idx_data)
+      } else {
+        n <- nrow(idx_data)
+      }
+
+      price <- idx_data$Price
+      current_price <- tail(price, 1)
+      high_52w <- max(price[idx_data$Date >= (as_of - years(1))], na.rm = TRUE)
+      low_52w  <- min(price[idx_data$Date >= (as_of - years(1))], na.rm = TRUE)
+
+      sma50  <- if (n >= 50)  mean(tail(price, 50))  else NA_real_
+      sma200 <- if (n >= 200) mean(tail(price, 200)) else NA_real_
+
+      rsi_vals <- calc_rsi(price, 14)
+      rsi_current <- tail(rsi_vals[!is.na(rsi_vals)], 1)
+      if (length(rsi_current) == 0) rsi_current <- NA_real_
+
+      pct_from_high <- (current_price / high_52w - 1) * 100
+      pct_from_low  <- (current_price / low_52w - 1) * 100
+      pct_vs_sma50  <- if (!is.na(sma50))  (current_price / sma50 - 1) * 100  else NA_real_
+      pct_vs_sma200 <- if (!is.na(sma200)) (current_price / sma200 - 1) * 100 else NA_real_
+
+      # Trend signal
+      trend <- if (!is.na(sma50) && !is.na(sma200)) {
+        if (sma50 > sma200) "Bullish" else "Bearish"
+      } else { "N/A" }
+
+      # Overall signal score (simple composite)
+      score <- 0
+      if (!is.na(rsi_current)) {
+        if (rsi_current < 30) score <- score + 2
+        else if (rsi_current < 50) score <- score + 1
+        else if (rsi_current > 70) score <- score - 2
+        else if (rsi_current > 50) score <- score - 1
+      }
+      if (!is.na(pct_vs_sma50))  score <- score + sign(pct_vs_sma50)
+      if (!is.na(pct_vs_sma200)) score <- score + sign(pct_vs_sma200)
+      if (trend == "Bullish") score <- score + 1
+      if (trend == "Bearish") score <- score - 1
+
+      signal <- if (score >= 3) "Strong Buy"
+        else if (score >= 1) "Buy"
+        else if (score <= -3) "Strong Sell"
+        else if (score <= -1) "Sell"
+        else "Neutral"
+
+      asset_class <- idx_data$Asset_Class[1]
+
+      data.frame(
+        Index = idx,
+        Asset_Class = asset_class,
+        Price = round(current_price, 2),
+        RSI = round(rsi_current, 1),
+        `vs SMA50` = round(pct_vs_sma50, 2),
+        `vs SMA200` = round(pct_vs_sma200, 2),
+        Trend = trend,
+        `From 52w High` = round(pct_from_high, 2),
+        `From 52w Low` = round(pct_from_low, 2),
+        Signal = signal,
+        stringsAsFactors = FALSE,
+        check.names = FALSE
+      )
+    })
+
+    # Apply asset class / type filters
+    if (!is.null(input$asset_class_filter)) {
+      scorecard <- scorecard %>% filter(Asset_Class %in% input$asset_class_filter)
+    }
+
+    signal_color <- function(value) {
+      if (is.na(value)) return(NULL)
+      bg <- switch(value,
+        "Strong Buy"  = "#28a745",
+        "Buy"         = "#8CC94A",
+        "Neutral"     = "#ffc107",
+        "Sell"        = "#fd7e14",
+        "Strong Sell" = "#dc3545",
+        "#6c757d"
+      )
+      fg <- if (value %in% c("Neutral")) "#000" else "#fff"
+      list(background = bg, color = fg, fontWeight = "bold", textAlign = "center",
+           borderRadius = "4px", padding = "4px 8px")
+    }
+
+    pct_style <- function(value) {
+      if (is.na(value)) return(NULL)
+      color <- if (value > 0) "#28a745" else if (value < 0) "#dc3545" else "#6c757d"
+      list(color = color, fontWeight = "500")
+    }
+
+    reactable(
+      scorecard,
+      defaultPageSize = 25,
+      searchable = TRUE,
+      bordered = TRUE,
+      striped = TRUE,
+      highlight = TRUE,
+      defaultSorted = "Signal",
+      columns = list(
+        Index = colDef(name = "Index", minWidth = 140, style = list(fontWeight = "bold")),
+        Asset_Class = colDef(name = "Asset Class", minWidth = 100),
+        Price = colDef(name = "Price", format = colFormat(digits = 2, currency = "USD",
+                       separators = TRUE), minWidth = 90),
+        RSI = colDef(name = "RSI (14)", minWidth = 70,
+          style = function(value) {
+            if (is.na(value)) return(NULL)
+            bg <- if (value > 70) "#dc354520" else if (value < 30) "#28a74520" else NULL
+            color <- if (value > 70) "#dc3545" else if (value < 30) "#28a745" else "#6c757d"
+            list(color = color, fontWeight = "bold", background = bg)
+          }
+        ),
+        `vs SMA50` = colDef(name = "vs SMA 50 (%)", format = colFormat(digits = 2, suffix = "%"),
+                            minWidth = 100, style = pct_style),
+        `vs SMA200` = colDef(name = "vs SMA 200 (%)", format = colFormat(digits = 2, suffix = "%"),
+                             minWidth = 110, style = pct_style),
+        Trend = colDef(name = "SMA Trend", minWidth = 90,
+          style = function(value) {
+            color <- if (value == "Bullish") "#28a745" else if (value == "Bearish") "#dc3545" else "#6c757d"
+            list(color = color, fontWeight = "600")
+          }
+        ),
+        `From 52w High` = colDef(name = "vs 52w High (%)", format = colFormat(digits = 2, suffix = "%"),
+                                  minWidth = 110, style = pct_style),
+        `From 52w Low` = colDef(name = "vs 52w Low (%)", format = colFormat(digits = 2, suffix = "%"),
+                                 minWidth = 110, style = pct_style),
+        Signal = colDef(name = "Signal", minWidth = 100, style = signal_color)
+      ),
+      theme = reactableTheme(
+        borderColor = "#dfe2e5",
+        stripedColor = "#f6f8fa",
+        highlightColor = "#f0f5ff",
+        cellPadding = "8px 12px",
+        style = list(fontFamily = "-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif"),
+        searchInputStyle = list(width = "100%")
+      )
+    )
   })
   
   # Refresh notification
