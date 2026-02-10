@@ -1,130 +1,30 @@
 library(shiny)
-library(bs4Dash)
+library(bslib)
 library(shinyWidgets)
 library(tidyverse)
 library(lubridate)
 library(reactable)
 library(echarts4r)
 library(scales)
-library(fresh)
 library(tidyquant)
 library(PerformanceAnalytics)
 library(xts)
 
-# Create custom theme - standard navy/white
-app_theme <- create_theme(
-  bs4dash_vars(
-    navbar_dark_color = "#fff",
-    navbar_dark_active_color = "#fff",
-    navbar_dark_hover_color = "#a8c5dd"
-  ),
-  bs4dash_yiq(
-    contrasted_threshold = 10,
-    text_dark = "#000080", 
-    text_light = "#FFF"
-  ),
-  bs4dash_layout(
-    main_bg = "#f4f6f9"
-  ),
-  bs4dash_sidebar_dark(
-    bg = "#000080",
-    color = "#fff",
-    hover_color = "#a8c5dd",
-    submenu_bg = "#000066", 
-    submenu_color = "#FFF", 
-    submenu_hover_color = "#a8c5dd"
-  ),
-  bs4dash_status(
-    primary = "#000080",
-    secondary = "#0066cc",
-    info = "#17a2b8",
-    success = "#28a745",
-    warning = "#ffc107",
-    danger = "#dc3545"
-  ),
-  bs4dash_color(
-    gray_x_light = "#e9ecef",
-    gray_600 = "#6c757d",
-    white = "#FFF",
-    gray_800 = "#343a40"
-  )
-)
-
 # UI Definition
-ui <- dashboardPage(
-  dark = FALSE,
-  freshTheme = app_theme,
-  header = dashboardHeader(
-    title = dashboardBrand(
-      title = "Index Performance",
-      color = "primary",
-      image = NULL
-    ),
-    skin = "dark",
-    rightUi = tagList(
-      dropdownMenu(
-        type = "messages",
-        badgeStatus = "primary",
-        icon = icon("filter"),
-        headerText = "Quick Filters",
-        messageItem(
-          from = "Asset Classes",
-          message = "Click sidebar to filter",
-          icon = icon("chart-pie")
-        )
-      )
-    )
-  ),
-  
-  sidebar = dashboardSidebar(
-    skin = "dark",
-    status = "primary",
-    elevation = 3,
-    sidebarUserPanel(
-      image = NULL,
-      name = "Dashboard Controls"
-    ),
-    sidebarMenu(
-      id = "sidebar",
-      sidebarHeader("Navigation"),
-      menuItem(
-        "Overview",
-        tabName = "overview",
-        icon = icon("dashboard")
-      ),
-      menuItem(
-        "Performance Table",
-        tabName = "table",
-        icon = icon("table")
-      ),
-      menuItem(
-        "Index Details",
-        tabName = "charts",
-        icon = icon("chart-line")
-      ),
-      menuItem(
-        "Technical Analysis",
-        tabName = "technical",
-        icon = icon("chart-area")
-      ),
-      menuItem(
-        "Economic Data",
-        tabName = "economic",
-        icon = icon("chart-area")
-      )
-    ),
-    
-    hr(),
-    
-    sidebarHeader("Filters"),
-    
+ui <- page_navbar(
+  title = "Index Performance",
+  theme = bs_theme(bootswatch = "flatly"),
+  sidebar = sidebar(
+    title = "Dashboard Controls",
+    width = 280,
+
     # Date Selection
-    dateInput("as_of_date", 
-              "As of Date:", 
+    dateInput("as_of_date",
+              "As of Date:",
               value = Sys.Date(),
               max = Sys.Date(),
               width = "100%"),
-    
+
     # Asset Class Filter
     pickerInput(
       "asset_class_filter",
@@ -138,7 +38,7 @@ ui <- dashboardPage(
         `count-selected-text` = "{0} classes selected"
       )
     ),
-    
+
     # Type Filter
     pickerInput(
       "type_filter",
@@ -152,461 +52,199 @@ ui <- dashboardPage(
         `count-selected-text` = "{0} types selected"
       )
     ),
-    
+
     hr(),
 
     actionButton("manage_tickers_btn",
                  "Manage Tickers",
                  icon = icon("plus-circle"),
-                 class = "btn-success btn-block",
-                 style = "margin: 10px;"),
+                 class = "btn-success w-100",
+                 style = "margin-bottom: 10px;"),
 
     actionButton("refresh",
                  "Refresh Data",
                  icon = icon("sync"),
-                 class = "btn-primary btn-block",
-                 style = "margin: 10px;")
+                 class = "btn-primary w-100")
   ),
-  
-  body = dashboardBody(
-    tags$head(
-      tags$style(HTML("
-        /* ===== Global Font ===== */
-        body, .content-wrapper, .main-sidebar {
-          font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-        }
 
-        /* ===== Navbar ===== */
-        .main-header .navbar {
-          background-color: #000080 !important;
-        }
-        .brand-link {
-          background-color: #000080 !important;
-          color: #fff !important;
-        }
-        .brand-link:hover {
-          color: #a8c5dd !important;
-        }
-
-        /* ===== Uniform Card Headers (all navy) ===== */
-        .card[class*='card-']:not(.card-outline) > .card-header {
-          background-color: #000080 !important;
-          color: #fff !important;
-          border-bottom: none;
-          font-weight: 600;
-          font-size: 14px;
-          letter-spacing: 0.3px;
-        }
-        .card[class*='card-']:not(.card-outline) > .card-header .card-title {
-          color: #fff !important;
-        }
-        .card[class*='card-']:not(.card-outline) > .card-header .btn {
-          color: #fff !important;
-        }
-
-        /* ===== Card Body ===== */
-        .card {
-          border: none;
-          border-radius: 8px;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-          transition: box-shadow 0.2s ease;
-        }
-        .card:hover {
-          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-        }
-
-        /* ===== Value Boxes (KPIs) ===== */
-        .small-box {
-          border-radius: 8px;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-          transition: transform 0.15s ease, box-shadow 0.15s ease;
-          border: none;
-        }
-        .small-box:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-        }
-        .small-box h3, .small-box .small-box-header {
-          font-size: 28px;
-          font-weight: 700;
-          letter-spacing: -0.5px;
-          color: #fff !important;
-        }
-        .small-box p, .small-box .small-box-footer {
-          font-size: 13px;
-          font-weight: 500;
-          color: rgba(255, 255, 255, 0.9) !important;
-          letter-spacing: 0.2px;
-        }
-        .small-box .icon {
-          color: rgba(255, 255, 255, 0.25) !important;
-          font-size: 60px;
-        }
-        .small-box .inner {
-          padding: 15px 15px 10px 15px;
-        }
-        /* Consistent navy background for all value boxes */
-        .small-box.bg-success,
-        .small-box.bg-danger,
-        .small-box.bg-primary,
-        .small-box.bg-info {
-          background: linear-gradient(135deg, #000080 0%, #0033a0 100%) !important;
-        }
-        .small-box > .small-box-footer {
-          background: rgba(0, 0, 0, 0.15) !important;
-          color: rgba(255, 255, 255, 0.85) !important;
-        }
-        .small-box > .small-box-footer:hover {
-          color: #fff !important;
-        }
-
-        /* ===== Reactable Table Hover ===== */
-        .rt-tr:hover .rt-td {
-          background-color: #f0f4ff !important;
-          color: #1a1a2e !important;
-        }
-        .rt-tr-group:hover {
-          background-color: #f0f4ff !important;
-        }
-        .rt-tr-group:hover .rt-td {
-          color: #1a1a2e !important;
-        }
-
-        /* ===== Sidebar Buttons ===== */
-        .btn-success.btn-block {
-          background-color: #0066cc !important;
-          border-color: #0055aa !important;
-          border-radius: 6px;
-          font-weight: 600;
-          font-size: 13px;
-          letter-spacing: 0.3px;
-        }
-        .btn-success.btn-block:hover {
-          background-color: #0055aa !important;
-        }
-        .btn-primary.btn-block {
-          background-color: #000080 !important;
-          border-color: #000066 !important;
-          border-radius: 6px;
-          font-weight: 600;
-          font-size: 13px;
-          letter-spacing: 0.3px;
-        }
-        .btn-primary.btn-block:hover {
-          background-color: #000066 !important;
-        }
-
-        /* ===== Sidebar Polish ===== */
-        .sidebar .nav-link {
-          font-size: 13.5px;
-          font-weight: 500;
-          letter-spacing: 0.2px;
-        }
-
-        /* ===== Modal ===== */
-        .modal-header {
-          background-color: #000080;
-          color: #fff;
-          border-radius: 4px 4px 0 0;
-        }
-        .modal-title {
-          font-weight: 600;
-          letter-spacing: 0.3px;
-        }
-      "))
+  # Overview Tab
+  nav_panel(
+    title = "Overview",
+    icon = icon("dashboard"),
+    layout_columns(
+      col_widths = c(3, 3, 3, 3),
+      value_box_output("best_performer"),
+      value_box_output("worst_performer"),
+      value_box_output("avg_return"),
+      value_box_output("total_indices")
     ),
-    tabItems(
-      # Overview Tab
-      tabItem(
-        tabName = "overview",
-        fluidRow(
-          valueBoxOutput("best_performer", width = 3),
-          valueBoxOutput("worst_performer", width = 3),
-          valueBoxOutput("avg_return", width = 3),
-          valueBoxOutput("total_indices", width = 3)
-        ),
-        fluidRow(
-          bs4Card(
-            title = "YTD Performance Distribution",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 6,
-            echarts4rOutput("ytd_dist_chart", height = "350px")
-          ),
-          bs4Card(
-            title = "Top 10 Performers (YTD)",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 6,
-            echarts4rOutput("top_performers_chart", height = "350px")
-          )
-        ),
-        fluidRow(
-          bs4Card(
-            title = "Asset Class Performance",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 12,
-            echarts4rOutput("asset_class_chart", height = "350px")
-          )
-        )
+    layout_columns(
+      col_widths = c(6, 6),
+      card(
+        card_header("YTD Performance Distribution"),
+        card_body(echarts4rOutput("ytd_dist_chart", height = "350px"))
       ),
-      
-      # Performance Table Tab
-      tabItem(
-        tabName = "table",
-        fluidRow(
-          bs4Card(
-            title = "Index Returns (%)",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 12,
-            closable = FALSE,
-            maximizable = TRUE,
-            reactableOutput("performance_table")
-          )
-        )
+      card(
+        card_header("Top 10 Performers (YTD)"),
+        card_body(echarts4rOutput("top_performers_chart", height = "350px"))
+      )
+    ),
+    card(
+      card_header("Asset Class Performance"),
+      card_body(echarts4rOutput("asset_class_chart", height = "350px"))
+    )
+  ),
+
+  # Performance Table Tab
+  nav_panel(
+    title = "Performance Table",
+    icon = icon("table"),
+    card(
+      card_header("Index Returns (%)"),
+      card_body(reactableOutput("performance_table"))
+    )
+  ),
+
+  # Charts Tab
+  nav_panel(
+    title = "Index Details",
+    icon = icon("chart-line"),
+    card(
+      card_body(
+        pickerInput("chart_indices",
+                    "Select Indices (Multi-Select):",
+                    choices = NULL,
+                    multiple = TRUE,
+                    options = list(
+                      `actions-box` = TRUE,
+                      `selected-text-format` = "count > 3",
+                      `count-selected-text` = "{0} indices selected",
+                      `live-search` = TRUE
+                    ))
+      )
+    ),
+    layout_columns(
+      col_widths = c(6, 6),
+      card(
+        card_header("Trailing Period Returns Comparison"),
+        card_body(echarts4rOutput("returns_chart", height = "400px"))
       ),
-      
-      # Charts Tab
-      tabItem(
-        tabName = "charts",
-        fluidRow(
-          bs4Card(
-            width = 12,
-            status = "primary",
-            pickerInput("chart_indices", 
-                       "Select Indices (Multi-Select):", 
-                       choices = NULL,
-                       multiple = TRUE,
-                       options = list(
-                         `actions-box` = TRUE,
-                         `selected-text-format` = "count > 3",
-                         `count-selected-text` = "{0} indices selected",
-                         `live-search` = TRUE
-                       ))
-          )
-        ),
-        fluidRow(
-          bs4Card(
-            title = "Trailing Period Returns Comparison",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 6,
-            maximizable = TRUE,
-            echarts4rOutput("returns_chart", height = "400px")
-          ),
-          bs4Card(
-            title = "Return vs Volatility",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 6,
-            maximizable = TRUE,
-            fluidRow(
-              column(12,
-                selectInput("volatility_period",
-                           "Return Period:",
-                           choices = c("1 Week", "MTD", "QTD", 
-                                     "3 Month", "6 Month", "YTD", "1 Year"),
-                           selected = "YTD")
-              )
-            ),
-            echarts4rOutput("volatility_scatter", height = "350px")
-          )
-        ),
-        fluidRow(
-          bs4Card(
-            title = "Price History (1 Year)",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 12,
-            maximizable = TRUE,
-            echarts4rOutput("price_chart", height = "400px")
-          )
-        ),
-        fluidRow(
-          bs4Card(
-            title = "Return Scatter Plot",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 12,
-            maximizable = TRUE,
-            fluidRow(
-              column(6,
-                selectInput("scatter_x_axis",
-                           "X-Axis Period:",
-                           choices = c("1 Day", "1 Week", "MTD", "QTD", 
-                                     "3 Month", "6 Month", "YTD", "1 Year", 
-                                     "2 Year", "3 Year"),
-                           selected = "YTD")
-              ),
-              column(6,
-                selectInput("scatter_y_axis",
-                           "Y-Axis Period:",
-                           choices = c("1 Day", "1 Week", "MTD", "QTD", 
-                                     "3 Month", "6 Month", "YTD", "1 Year", 
-                                     "2 Year", "3 Year"),
-                           selected = "1 Year")
-              )
-            ),
-            echarts4rOutput("scatter_chart", height = "400px")
-          )
+      card(
+        card_header("Return vs Volatility"),
+        card_body(
+          selectInput("volatility_period",
+                      "Return Period:",
+                      choices = c("1 Week", "MTD", "QTD",
+                                  "3 Month", "6 Month", "YTD", "1 Year"),
+                      selected = "YTD"),
+          echarts4rOutput("volatility_scatter", height = "350px")
         )
-      ),
-      
-      # Technical Analysis Tab
-      tabItem(
-        tabName = "technical",
-        fluidRow(
-          bs4Card(
-            width = 12,
-            status = "primary",
-            fluidRow(
-              column(4,
-                pickerInput("ta_ticker",
-                            "Select Ticker:",
-                            choices = NULL,
-                            multiple = FALSE,
-                            options = list(`live-search` = TRUE))
-              ),
-              column(4,
-                selectInput("ta_period",
-                            "Lookback Period:",
-                            choices = c("3 Months" = "3m",
-                                        "6 Months" = "6m",
-                                        "1 Year" = "1y",
-                                        "2 Years" = "2y",
-                                        "All" = "all"),
-                            selected = "1y")
-              ),
-              column(4,
-                pickerInput("ta_overlays",
-                            "Chart Overlays:",
-                            choices = c("SMA 20" = "sma20",
-                                        "SMA 50" = "sma50",
-                                        "SMA 200" = "sma200",
-                                        "Bollinger Bands" = "bbands"),
-                            selected = c("sma50", "sma200"),
-                            multiple = TRUE,
-                            options = list(`actions-box` = TRUE))
-              )
-            )
-          )
+      )
+    ),
+    card(
+      card_header("Price History (1 Year)"),
+      card_body(echarts4rOutput("price_chart", height = "400px"))
+    ),
+    card(
+      card_header("Return Scatter Plot"),
+      card_body(
+        layout_columns(
+          col_widths = c(6, 6),
+          selectInput("scatter_x_axis",
+                      "X-Axis Period:",
+                      choices = c("1 Day", "1 Week", "MTD", "QTD",
+                                  "3 Month", "6 Month", "YTD", "1 Year",
+                                  "2 Year", "3 Year"),
+                      selected = "YTD"),
+          selectInput("scatter_y_axis",
+                      "Y-Axis Period:",
+                      choices = c("1 Day", "1 Week", "MTD", "QTD",
+                                  "3 Month", "6 Month", "YTD", "1 Year",
+                                  "2 Year", "3 Year"),
+                      selected = "1 Year")
         ),
-        fluidRow(
-          bs4Card(
-            title = "Price Chart with Moving Averages",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 12,
-            maximizable = TRUE,
-            echarts4rOutput("ta_price_chart", height = "450px")
-          )
-        ),
-        fluidRow(
-          bs4Card(
-            title = "RSI (14)",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 12,
-            maximizable = TRUE,
-            echarts4rOutput("ta_rsi_chart", height = "200px")
-          )
-        ),
-        fluidRow(
-          bs4Card(
-            title = "Technical Scorecard - All Tickers",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 12,
-            maximizable = TRUE,
-            closable = FALSE,
-            reactableOutput("ta_scorecard_table")
-          )
-        )
-      ),
-      
-      # Economic Data Tab
-      tabItem(
-        tabName = "economic",
-        fluidRow(
-          bs4Card(
-            title = "Key Economic Indicators",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 12,
-            reactableOutput("economic_table")
-          )
-        ),
-        fluidRow(
-          bs4Card(
-            title = "US Treasury Yield Curve",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 8,
-            maximizable = TRUE,
-            echarts4rOutput("yield_curve_chart", height = "400px")
-          ),
-          bs4Card(
-            title = "Yield Curve Data",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 4,
-            reactableOutput("yield_curve_table")
-          )
-        ),
-        fluidRow(
-          bs4Card(
-            title = "Credit Spreads",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 6,
-            maximizable = TRUE,
-            echarts4rOutput("credit_spreads_chart", height = "400px")
-          ),
-          bs4Card(
-            title = "Credit Spread Data",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 6,
-            reactableOutput("credit_spreads_table")
-          )
-        )
+        echarts4rOutput("scatter_chart", height = "400px")
       )
     )
   ),
-  
-  controlbar = dashboardControlbar(
-    skin = "light",
-    title = "Settings",
-    controlbarMenu(
-      id = "controlbarMenu",
-      controlbarItem(
-        title = "Display Options",
-        sliderInput(
-          "decimal_places",
-          "Decimal Places:",
-          min = 0,
-          max = 4,
-          value = 2
-        ),
-        switchInput(
-          "show_percentages",
-          "Show % Symbol",
-          value = TRUE
-        ),
-        switchInput(
-          "color_coding",
-          "Color Coding",
-          value = TRUE
+
+  # Technical Analysis Tab
+  nav_panel(
+    title = "Technical Analysis",
+    icon = icon("chart-area"),
+    card(
+      card_body(
+        layout_columns(
+          col_widths = c(4, 4, 4),
+          pickerInput("ta_ticker",
+                      "Select Ticker:",
+                      choices = NULL,
+                      multiple = FALSE,
+                      options = list(`live-search` = TRUE)),
+          selectInput("ta_period",
+                      "Lookback Period:",
+                      choices = c("3 Months" = "3m",
+                                  "6 Months" = "6m",
+                                  "1 Year" = "1y",
+                                  "2 Years" = "2y",
+                                  "All" = "all"),
+                      selected = "1y"),
+          pickerInput("ta_overlays",
+                      "Chart Overlays:",
+                      choices = c("SMA 20" = "sma20",
+                                  "SMA 50" = "sma50",
+                                  "SMA 200" = "sma200",
+                                  "Bollinger Bands" = "bbands"),
+                      selected = c("sma50", "sma200"),
+                      multiple = TRUE,
+                      options = list(`actions-box` = TRUE))
         )
       )
+    ),
+    card(
+      card_header("Price Chart with Moving Averages"),
+      card_body(echarts4rOutput("ta_price_chart", height = "450px"))
+    ),
+    card(
+      card_header("RSI (14)"),
+      card_body(echarts4rOutput("ta_rsi_chart", height = "200px"))
+    ),
+    card(
+      card_header("Technical Scorecard - All Tickers"),
+      card_body(reactableOutput("ta_scorecard_table"))
     )
   ),
-  
-  footer = dashboardFooter(
-    left = "Index Performance Dashboard",
-    right = paste("Last Updated:", Sys.time())
+
+  # Economic Data Tab
+  nav_panel(
+    title = "Economic Data",
+    icon = icon("chart-area"),
+    card(
+      card_header("Key Economic Indicators"),
+      card_body(reactableOutput("economic_table"))
+    ),
+    layout_columns(
+      col_widths = c(8, 4),
+      card(
+        card_header("US Treasury Yield Curve"),
+        card_body(echarts4rOutput("yield_curve_chart", height = "400px"))
+      ),
+      card(
+        card_header("Yield Curve Data"),
+        card_body(reactableOutput("yield_curve_table"))
+      )
+    ),
+    layout_columns(
+      col_widths = c(6, 6),
+      card(
+        card_header("Credit Spreads"),
+        card_body(echarts4rOutput("credit_spreads_chart", height = "400px"))
+      ),
+      card(
+        card_header("Credit Spread Data"),
+        card_body(reactableOutput("credit_spreads_table"))
+      )
+    )
   )
 )
 
@@ -1183,55 +821,55 @@ server <- function(input, output, session) {
   })
   
   # Value Boxes
-  output$best_performer <- renderValueBox({
+  output$best_performer <- render_value_box({
     req(nrow(filtered_data()) > 0)
 
     best <- filtered_data() %>%
       slice_max(YTD, n = 1)
 
-    valueBox(
+    value_box(
+      title = paste("Best YTD:", best$Index),
       value = paste0(round(best$YTD, 2), "%"),
-      subtitle = paste("Best YTD:", best$Index),
-      icon = icon("arrow-up"),
-      color = "primary"
+      showcase = icon("arrow-up"),
+      theme = "primary"
     )
   })
 
-  output$worst_performer <- renderValueBox({
+  output$worst_performer <- render_value_box({
     req(nrow(filtered_data()) > 0)
 
     worst <- filtered_data() %>%
       slice_min(YTD, n = 1)
 
-    valueBox(
+    value_box(
+      title = paste("Worst YTD:", worst$Index),
       value = paste0(round(worst$YTD, 2), "%"),
-      subtitle = paste("Worst YTD:", worst$Index),
-      icon = icon("arrow-down"),
-      color = "primary"
+      showcase = icon("arrow-down"),
+      theme = "danger"
     )
   })
 
-  output$avg_return <- renderValueBox({
+  output$avg_return <- render_value_box({
     req(nrow(filtered_data()) > 0)
 
     avg <- mean(filtered_data()$YTD, na.rm = TRUE)
 
-    valueBox(
+    value_box(
+      title = "Avg YTD Return",
       value = paste0(round(avg, 2), "%"),
-      subtitle = "Avg YTD Return",
-      icon = icon("chart-bar"),
-      color = "primary"
+      showcase = icon("chart-bar"),
+      theme = "info"
     )
   })
 
-  output$total_indices <- renderValueBox({
+  output$total_indices <- render_value_box({
     req(nrow(filtered_data()) > 0)
 
-    valueBox(
+    value_box(
+      title = "Total Indices Tracked",
       value = nrow(filtered_data()),
-      subtitle = "Total Indices Tracked",
-      icon = icon("list"),
-      color = "primary"
+      showcase = icon("list"),
+      theme = "success"
     )
   })
   
