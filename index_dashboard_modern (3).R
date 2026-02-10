@@ -73,10 +73,10 @@ ui <- page_navbar(
     icon = icon("dashboard"),
     layout_columns(
       col_widths = c(3, 3, 3, 3),
-      value_box_output("best_performer"),
-      value_box_output("worst_performer"),
-      value_box_output("avg_return"),
-      value_box_output("total_indices")
+      uiOutput("best_performer"),
+      uiOutput("worst_performer"),
+      uiOutput("avg_return"),
+      uiOutput("total_indices")
     ),
     layout_columns(
       col_widths = c(6, 6),
@@ -821,7 +821,7 @@ server <- function(input, output, session) {
   })
   
   # Value Boxes
-  output$best_performer <- render_value_box({
+  output$best_performer <- renderUI({
     req(nrow(filtered_data()) > 0)
 
     best <- filtered_data() %>%
@@ -835,7 +835,7 @@ server <- function(input, output, session) {
     )
   })
 
-  output$worst_performer <- render_value_box({
+  output$worst_performer <- renderUI({
     req(nrow(filtered_data()) > 0)
 
     worst <- filtered_data() %>%
@@ -849,7 +849,7 @@ server <- function(input, output, session) {
     )
   })
 
-  output$avg_return <- render_value_box({
+  output$avg_return <- renderUI({
     req(nrow(filtered_data()) > 0)
 
     avg <- mean(filtered_data()$YTD, na.rm = TRUE)
@@ -862,7 +862,7 @@ server <- function(input, output, session) {
     )
   })
 
-  output$total_indices <- render_value_box({
+  output$total_indices <- renderUI({
     req(nrow(filtered_data()) > 0)
 
     value_box(
