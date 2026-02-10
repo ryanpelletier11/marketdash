@@ -154,9 +154,15 @@ ui <- dashboardPage(
     ),
     
     hr(),
-    
-    actionButton("refresh", 
-                 "Refresh Data", 
+
+    actionButton("manage_tickers_btn",
+                 "Manage Tickers",
+                 icon = icon("plus-circle"),
+                 class = "btn-success btn-block",
+                 style = "margin: 10px;"),
+
+    actionButton("refresh",
+                 "Refresh Data",
                  icon = icon("sync"),
                  class = "btn-primary btn-block",
                  style = "margin: 10px;")
@@ -469,48 +475,204 @@ server <- function(input, output, session) {
   }
   
   # ========== TICKER CONFIGURATION ==========
-  # Define your tickers and index names
-  # Replace these with your actual tickers
-  ticker_config <- data.frame(
-    Index = c("S&P 500", "NASDAQ", "Russell 2000", "MSCI World", 
-              "Energy Sector", "Technology Sector", "Healthcare Sector",
-              "Value Factor", "Momentum Factor", "Quality Factor",
-              "US Agg Bond", "High Yield", "Gold", "USD Index"),
-    Ticker = c("^GSPC", "^IXIC", "^RUT", "URTH", 
-               "XLE", "XLK", "XLV",
-               "VTV", "MTUM", "QUAL",
-               "AGG", "HYG", "GLD", "UUP"),
-    Asset_Class = c("Equity", "Equity", "Equity", "Equity",
-                   "Equity", "Equity", "Equity",
-                   "Equity", "Equity", "Equity",
-                   "Fixed Income", "Fixed Income", "Commodity", "Currency"),
-    Type = c("Broad Market", "Broad Market", "Broad Market", "Geographic",
-            "Sector", "Sector", "Sector",
-            "Factor", "Factor", "Factor",
-            "Broad Market", "Sector", "Broad Market", "Broad Market"),
-    stringsAsFactors = FALSE
+  # Define your tickers and index names (reactive so users can add/remove)
+  ticker_config <- reactiveVal(
+    data.frame(
+      Index = c("S&P 500", "NASDAQ", "Russell 2000", "MSCI World",
+                "Energy Sector", "Technology Sector", "Healthcare Sector",
+                "Value Factor", "Momentum Factor", "Quality Factor",
+                "US Agg Bond", "High Yield", "Gold", "USD Index"),
+      Ticker = c("^GSPC", "^IXIC", "^RUT", "URTH",
+                 "XLE", "XLK", "XLV",
+                 "VTV", "MTUM", "QUAL",
+                 "AGG", "HYG", "GLD", "UUP"),
+      Asset_Class = c("Equity", "Equity", "Equity", "Equity",
+                     "Equity", "Equity", "Equity",
+                     "Equity", "Equity", "Equity",
+                     "Fixed Income", "Fixed Income", "Commodity", "Currency"),
+      Type = c("Broad Market", "Broad Market", "Broad Market", "Geographic",
+              "Sector", "Sector", "Sector",
+              "Factor", "Factor", "Factor",
+              "Broad Market", "Sector", "Broad Market", "Broad Market"),
+      stringsAsFactors = FALSE
+    )
   )
-  
+
+  # ========== MANAGE TICKERS MODAL ==========
+  observeEvent(input$manage_tickers_btn, {
+    showModal(modalDialog(
+      title = "Manage Tickers",
+      size = "l",
+      easyClose = TRUE,
+      footer = modalButton("Close"),
+
+      fluidRow(
+        column(12,
+          h4("Add New Ticker"),
+          fluidRow(
+            column(3,
+              textInput("new_ticker_symbol", "Ticker Symbol",
+                        placeholder = "e.g. AAPL")
+            ),
+            column(3,
+              textInput("new_ticker_name", "Display Name",
+                        placeholder = "e.g. Apple Inc.")
+            ),
+            column(3,
+              selectInput("new_ticker_asset_class", "Asset Class",
+                          choices = c("Equity", "Fixed Income", "Commodity",
+                                      "Currency", "Alternative"))
+            ),
+            column(3,
+              selectInput("new_ticker_type", "Type",
+                          choices = c("Broad Market", "Sector", "Factor",
+                                      "Style", "Geographic"))
+            )
+          ),
+          actionButton("add_ticker_btn", "Add Ticker",
+                       icon = icon("plus"),
+                       class = "btn-success",
+                       style = "margin-bottom: 15px;"),
+          hr(),
+          h4("Current Tickers"),
+          reactableOutput("ticker_config_table")
+        )
+      )
+    ))
+  })
+
+  # Render the current ticker config table inside the modal
+  output$ticker_config_table <- renderReactable({
+    config <- ticker_config()
+    req(nrow(config) > 0)
+
+    # Add a remove button column as HTML
+    config$Remove <- paste0(
+      '<button class="btn btn-danger btn-sm remove-ticker" data-ticker="',
+      config$Ticker, '" onclick="Shiny.setInputValue(\'remove_ticker\', \'',
+      config$Ticker, '\', {priority: \'event\'})">Remove</button>'
+    )
+
+    reactable(
+      config,
+      defaultPageSize = 20,
+      bordered = TRUE,
+      striped = TRUE,
+      compact = TRUE,
+      columns = list(
+        Index = colDef(name = "Name", minWidth = 140),
+        Ticker = colDef(name = "Symbol", minWidth = 80),
+        Asset_Class = colDef(name = "Asset Class", minWidth = 100),
+        Type = colDef(name = "Type", minWidth = 100),
+        Remove = colDef(name = "", html = TRUE, minWidth = 80, sortable = FALSE)
+      ),
+      theme = reactableTheme(
+        borderColor = "#dfe2e5",
+        stripedColor = "#f6f8fa",
+        cellPadding = "6px 8px"
+      )
+    )
+  })
+
+  # Add ticker handler
+  observeEvent(input$add_ticker_btn, {
+    symbol <- trimws(toupper(input$new_ticker_symbol))
+    name <- trimws(input$new_ticker_name)
+
+    # Validate inputs
+    if (nchar(symbol) == 0) {
+      showNotification("Please enter a ticker symbol.", type = "error")
+      return()
+    }
+    if (nchar(name) == 0) {
+      showNotification("Please enter a display name.", type = "error")
+      return()
+    }
+
+    current <- ticker_config()
+
+    # Check for duplicate ticker
+    if (symbol %in% current$Ticker) {
+      showNotification(paste0("Ticker '", symbol, "' already exists."),
+                       type = "warning")
+      return()
+    }
+
+    # Check for duplicate name
+    if (name %in% current$Index) {
+      showNotification(paste0("Name '", name, "' already exists."),
+                       type = "warning")
+      return()
+    }
+
+    # Validate ticker by attempting a quick fetch
+    withProgress(message = paste("Validating", symbol, "..."), value = 0.5, {
+      valid <- tryCatch({
+        test_data <- tq_get(symbol, get = "stock.prices",
+                            from = Sys.Date() - days(7), to = Sys.Date())
+        nrow(test_data) > 0
+      }, error = function(e) FALSE)
+    })
+
+    if (!valid) {
+      showNotification(
+        paste0("Could not find data for '", symbol,
+               "'. Please check the ticker symbol."),
+        type = "error", duration = 5)
+      return()
+    }
+
+    # Add the new ticker
+    new_row <- data.frame(
+      Index = name,
+      Ticker = symbol,
+      Asset_Class = input$new_ticker_asset_class,
+      Type = input$new_ticker_type,
+      stringsAsFactors = FALSE
+    )
+
+    ticker_config(rbind(current, new_row))
+
+    # Clear inputs
+    updateTextInput(session, "new_ticker_symbol", value = "")
+    updateTextInput(session, "new_ticker_name", value = "")
+
+    showNotification(paste0("Added '", name, "' (", symbol, "). Click Refresh Data to load."),
+                     type = "message", duration = 4)
+  })
+
+  # Remove ticker handler
+  observeEvent(input$remove_ticker, {
+    current <- ticker_config()
+    ticker_config(current %>% filter(Ticker != input$remove_ticker))
+
+    showNotification("Ticker removed. Click Refresh Data to update.",
+                     type = "message", duration = 3)
+  })
+
   # Load and process data using tidyquant
   index_data <- reactive({
     # Trigger refresh
     input$refresh
-    
+
+    config <- ticker_config()
+    req(nrow(config) > 0)
+
     # Date range for data
     start_date <- as.Date("2021-01-01")
     end_date <- Sys.Date()
-    
+
     # Fetch price data for all tickers
     withProgress(message = 'Fetching ticker data...', value = 0, {
-      
+
       price_data_list <- list()
-      
-      for(i in 1:nrow(ticker_config)) {
-        incProgress(1/nrow(ticker_config), detail = ticker_config$Index[i])
-        
+
+      for(i in 1:nrow(config)) {
+        incProgress(1/nrow(config), detail = config$Index[i])
+
         tryCatch({
           ticker_data <- tq_get(
-            ticker_config$Ticker[i],
+            config$Ticker[i],
             get = "stock.prices",
             from = start_date,
             to = end_date
@@ -518,23 +680,23 @@ server <- function(input, output, session) {
             select(date, adjusted) %>%
             rename(Date = date, Price = adjusted) %>%
             mutate(
-              Index = ticker_config$Index[i],
-              Ticker = ticker_config$Ticker[i],
-              Asset_Class = ticker_config$Asset_Class[i],
-              Type = ticker_config$Type[i]
+              Index = config$Index[i],
+              Ticker = config$Ticker[i],
+              Asset_Class = config$Asset_Class[i],
+              Type = config$Type[i]
             )
-          
+
           price_data_list[[i]] <- ticker_data
         }, error = function(e) {
           # If ticker fails, create empty data frame
           showNotification(
-            paste("Failed to fetch:", ticker_config$Index[i]),
+            paste("Failed to fetch:", config$Index[i]),
             type = "warning",
             duration = 3
           )
         })
       }
-      
+
       # Combine all data
       if(length(price_data_list) > 0) {
         price_data <- bind_rows(price_data_list)
@@ -542,7 +704,7 @@ server <- function(input, output, session) {
         price_data <- data.frame()
       }
     })
-    
+
     return(price_data)
   })
   
