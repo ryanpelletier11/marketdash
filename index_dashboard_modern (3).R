@@ -12,11 +12,14 @@ library(xts)
 
 # UI Definition
 ui <- page_navbar(
-  title = "Index Performance",
+  title = tags$span(
+    tags$strong("Investor Dashboard"),
+    tags$span(" | Market Intelligence", style = "font-weight: 300; font-size: 14px; opacity: 0.8;")
+  ),
   theme = bs_theme(bootswatch = "flatly"),
   sidebar = sidebar(
-    title = "Dashboard Controls",
-    width = 280,
+    title = "Controls",
+    width = 260,
 
     # Date Selection
     dateInput("as_of_date",
@@ -24,6 +27,8 @@ ui <- page_navbar(
               value = Sys.Date(),
               max = Sys.Date(),
               width = "100%"),
+
+    hr(),
 
     # Asset Class Filter
     pickerInput(
@@ -58,7 +63,7 @@ ui <- page_navbar(
     actionButton("manage_tickers_btn",
                  "Manage Tickers",
                  icon = icon("plus-circle"),
-                 class = "btn-success w-100",
+                 class = "btn-outline-secondary w-100",
                  style = "margin-bottom: 10px;"),
 
     actionButton("refresh",
@@ -67,60 +72,133 @@ ui <- page_navbar(
                  class = "btn-primary w-100")
   ),
 
-  # Overview Tab
+  # ============================================================
+  # TAB 1: DASHBOARD (Executive Summary Home Page)
+  # The single screen an allocator checks every morning
+  # ============================================================
   nav_panel(
-    title = "Overview",
-    icon = icon("dashboard"),
+    title = "Dashboard",
+    icon = icon("gauge-high"),
+
+    # Row 1: Market Pulse KPIs - the 4 numbers that set the tone
     layout_columns(
       col_widths = c(3, 3, 3, 3),
-      uiOutput("best_performer"),
-      uiOutput("worst_performer"),
-      uiOutput("avg_return"),
-      uiOutput("total_indices")
+      uiOutput("kpi_sp500"),
+      uiOutput("kpi_vix"),
+      uiOutput("kpi_10y_treasury"),
+      uiOutput("kpi_credit_spread")
+    ),
+
+    # Row 2: Condensed Performance Summary + Top/Bottom Movers
+    layout_columns(
+      col_widths = c(8, 4),
+      card(
+        card_header(
+          class = "d-flex justify-content-between align-items-center",
+          tags$strong("Performance Summary"),
+          tags$small(class = "text-muted", "Key return periods across all tracked indices")
+        ),
+        card_body(
+          style = "padding: 8px;",
+          reactableOutput("home_performance_table")
+        )
+      ),
+      card(
+        card_header(tags$strong("Top & Bottom Movers (YTD)")),
+        card_body(echarts4rOutput("home_movers_chart", height = "380px"))
+      )
+    ),
+
+    # Row 3: Asset Class Returns + Yield Curve (macro context)
+    layout_columns(
+      col_widths = c(6, 6),
+      card(
+        card_header(tags$strong("Asset Class Returns")),
+        card_body(echarts4rOutput("asset_class_chart", height = "320px"))
+      ),
+      card(
+        card_header(
+          class = "d-flex justify-content-between align-items-center",
+          tags$strong("US Treasury Yield Curve"),
+          tags$small(class = "text-muted", "Current term structure")
+        ),
+        card_body(echarts4rOutput("home_yield_curve_chart", height = "320px"))
+      )
+    ),
+
+    # Row 4: Risk/Return Scatter + Technical Signals Summary
+    layout_columns(
+      col_widths = c(6, 6),
+      card(
+        card_header(
+          class = "d-flex justify-content-between align-items-center",
+          tags$strong("YTD Risk / Return"),
+          tags$small(class = "text-muted", "Volatility vs. return for all indices")
+        ),
+        card_body(echarts4rOutput("home_risk_return_chart", height = "340px"))
+      ),
+      card(
+        card_header(
+          class = "d-flex justify-content-between align-items-center",
+          tags$strong("Technical Signals"),
+          tags$small(class = "text-muted", "Composite signal across all tickers")
+        ),
+        card_body(
+          style = "padding: 8px;",
+          reactableOutput("home_signals_table")
+        )
+      )
+    )
+  ),
+
+  # ============================================================
+  # TAB 2: PERFORMANCE (Full expanded returns & risk metrics)
+  # ============================================================
+  nav_panel(
+    title = "Performance",
+    icon = icon("table"),
+    card(
+      card_header(
+        class = "d-flex justify-content-between align-items-center",
+        tags$strong("Index Returns & Risk Metrics"),
+        tags$small(class = "text-muted", "All periods | Grouped by asset class & type")
+      ),
+      card_body(reactableOutput("performance_table"))
     ),
     layout_columns(
       col_widths = c(6, 6),
       card(
         card_header("YTD Performance Distribution"),
-        card_body(echarts4rOutput("ytd_dist_chart", height = "350px"))
+        card_body(echarts4rOutput("ytd_dist_chart", height = "320px"))
       ),
       card(
         card_header("Top 10 Performers (YTD)"),
-        card_body(echarts4rOutput("top_performers_chart", height = "350px"))
+        card_body(echarts4rOutput("top_performers_chart", height = "320px"))
       )
-    ),
-    card(
-      card_header("Asset Class Performance"),
-      card_body(echarts4rOutput("asset_class_chart", height = "350px"))
     )
   ),
 
-  # Performance Table Tab
+  # ============================================================
+  # TAB 3: CHARTS & ANALYTICS (Index comparison deep-dive)
+  # ============================================================
   nav_panel(
-    title = "Performance Table",
-    icon = icon("table"),
-    card(
-      card_header("Index Returns (%)"),
-      card_body(reactableOutput("performance_table"))
-    )
-  ),
-
-  # Charts Tab
-  nav_panel(
-    title = "Index Details",
+    title = "Charts & Analytics",
     icon = icon("chart-line"),
     card(
       card_body(
-        pickerInput("chart_indices",
-                    "Select Indices (Multi-Select):",
-                    choices = NULL,
-                    multiple = TRUE,
-                    options = list(
-                      `actions-box` = TRUE,
-                      `selected-text-format` = "count > 3",
-                      `count-selected-text` = "{0} indices selected",
-                      `live-search` = TRUE
-                    ))
+        layout_columns(
+          col_widths = c(12),
+          pickerInput("chart_indices",
+                      "Select Indices to Compare:",
+                      choices = NULL,
+                      multiple = TRUE,
+                      options = list(
+                        `actions-box` = TRUE,
+                        `selected-text-format` = "count > 3",
+                        `count-selected-text` = "{0} indices selected",
+                        `live-search` = TRUE
+                      ))
+        )
       )
     ),
     layout_columns(
@@ -168,7 +246,9 @@ ui <- page_navbar(
     )
   ),
 
-  # Technical Analysis Tab
+  # ============================================================
+  # TAB 4: TECHNICAL ANALYSIS (Signals & Indicators)
+  # ============================================================
   nav_panel(
     title = "Technical Analysis",
     icon = icon("chart-area"),
@@ -215,12 +295,14 @@ ui <- page_navbar(
     )
   ),
 
-  # Economic Data Tab
+  # ============================================================
+  # TAB 5: MACRO & ECONOMIC (Full economic data deep-dive)
+  # ============================================================
   nav_panel(
-    title = "Economic Data",
-    icon = icon("chart-area"),
+    title = "Macro & Economic",
+    icon = icon("globe"),
     card(
-      card_header("Key Economic Indicators"),
+      card_header(tags$strong("Key Economic Indicators")),
       card_body(reactableOutput("economic_table"))
     ),
     layout_columns(
@@ -820,56 +902,435 @@ server <- function(input, output, session) {
     updatePickerInput(session, "chart_indices", choices = choices, selected = choices[1])
   })
   
-  # Value Boxes
-  output$best_performer <- renderUI({
+  # ========== DASHBOARD HOME PAGE: Market Pulse KPIs ==========
+  # These are the 4 numbers an institutional allocator checks first thing
+
+  output$kpi_sp500 <- renderUI({
     req(nrow(filtered_data()) > 0)
 
-    best <- filtered_data() %>%
-      slice_max(YTD, n = 1)
+    sp_data <- filtered_data() %>% filter(Index == "S&P 500")
+    if (nrow(sp_data) == 0) {
+      # Fallback: use best performer
+      best <- filtered_data() %>% slice_max(YTD, n = 1)
+      return(value_box(
+        title = paste("Best YTD:", best$Index),
+        value = paste0(round(best$YTD, 2), "%"),
+        showcase = icon("arrow-trend-up"),
+        theme = "primary"
+      ))
+    }
+
+    day_chg <- sp_data$`1 Day`
+    ytd_chg <- sp_data$YTD
+    direction <- if (!is.na(day_chg) && day_chg >= 0) "up" else "down"
 
     value_box(
-      title = paste("Best YTD:", best$Index),
-      value = paste0(round(best$YTD, 2), "%"),
-      showcase = icon("arrow-up"),
-      theme = "primary"
+      title = "S&P 500",
+      value = paste0(ifelse(!is.na(day_chg) && day_chg >= 0, "+", ""),
+                     round(day_chg, 2), "% today"),
+      p(paste0("YTD: ", ifelse(!is.na(ytd_chg) && ytd_chg >= 0, "+", ""),
+               round(ytd_chg, 2), "%"),
+        style = "margin: 0; font-size: 13px; opacity: 0.85;"),
+      showcase = icon(ifelse(direction == "up", "arrow-trend-up", "arrow-trend-down")),
+      theme = ifelse(direction == "up", "primary", "danger")
     )
   })
 
-  output$worst_performer <- renderUI({
-    req(nrow(filtered_data()) > 0)
+  output$kpi_vix <- renderUI({
+    data <- economic_data()
+    vix_row <- data %>% filter(Indicator == "VIX Index")
 
-    worst <- filtered_data() %>%
-      slice_min(YTD, n = 1)
+    if (nrow(vix_row) == 0 || is.na(vix_row$Value[1])) {
+      return(value_box(
+        title = "VIX",
+        value = "N/A",
+        showcase = icon("bolt"),
+        theme = "secondary"
+      ))
+    }
+
+    vix_val <- round(vix_row$Value[1], 1)
+    vix_theme <- if (vix_val > 25) "danger" else if (vix_val > 18) "warning" else "success"
+    vix_label <- if (vix_val > 25) "Elevated" else if (vix_val > 18) "Moderate" else "Low"
 
     value_box(
-      title = paste("Worst YTD:", worst$Index),
-      value = paste0(round(worst$YTD, 2), "%"),
-      showcase = icon("arrow-down"),
-      theme = "danger"
+      title = "VIX (Volatility)",
+      value = vix_val,
+      p(vix_label, style = "margin: 0; font-size: 13px; opacity: 0.85;"),
+      showcase = icon("bolt"),
+      theme = vix_theme
     )
   })
 
-  output$avg_return <- renderUI({
-    req(nrow(filtered_data()) > 0)
+  output$kpi_10y_treasury <- renderUI({
+    data <- economic_data()
+    rate_row <- data %>% filter(Indicator == "10-Year Treasury Rate (%)")
 
-    avg <- mean(filtered_data()$YTD, na.rm = TRUE)
+    if (nrow(rate_row) == 0 || is.na(rate_row$Value[1])) {
+      return(value_box(
+        title = "10Y Treasury",
+        value = "N/A",
+        showcase = icon("landmark"),
+        theme = "secondary"
+      ))
+    }
+
+    rate_val <- round(rate_row$Value[1], 2)
+
+    # Also get 10Y-2Y spread
+    spread_row <- data %>% filter(Indicator == "10Y-2Y Spread (bps)")
+    spread_text <- if (nrow(spread_row) > 0 && !is.na(spread_row$Value[1])) {
+      paste0("10Y-2Y Spread: ", round(spread_row$Value[1], 2), "%")
+    } else {
+      ""
+    }
 
     value_box(
-      title = "Avg YTD Return",
-      value = paste0(round(avg, 2), "%"),
-      showcase = icon("chart-bar"),
+      title = "10-Year Treasury",
+      value = paste0(rate_val, "%"),
+      p(spread_text, style = "margin: 0; font-size: 13px; opacity: 0.85;"),
+      showcase = icon("landmark"),
       theme = "info"
     )
   })
 
-  output$total_indices <- renderUI({
-    req(nrow(filtered_data()) > 0)
+  output$kpi_credit_spread <- renderUI({
+    data <- credit_spreads_data()
+
+    hy_row <- data %>% filter(Spread == "ICE BofA High Yield")
+
+    if (nrow(hy_row) == 0 || is.na(hy_row$Rate[1])) {
+      # Fallback: total indices count
+      req(nrow(filtered_data()) > 0)
+      return(value_box(
+        title = "Indices Tracked",
+        value = nrow(filtered_data()),
+        showcase = icon("list"),
+        theme = "success"
+      ))
+    }
+
+    hy_val <- round(hy_row$Rate[1], 2)
+    hy_theme <- if (hy_val > 6) "danger" else if (hy_val > 4.5) "warning" else "success"
+    hy_label <- if (hy_val > 6) "Wide" else if (hy_val > 4.5) "Moderate" else "Tight"
 
     value_box(
-      title = "Total Indices Tracked",
-      value = nrow(filtered_data()),
-      showcase = icon("list"),
-      theme = "success"
+      title = "HY Credit Spread",
+      value = paste0(hy_val, "%"),
+      p(hy_label, style = "margin: 0; font-size: 13px; opacity: 0.85;"),
+      showcase = icon("chart-column"),
+      theme = hy_theme
+    )
+  })
+
+  # ========== DASHBOARD HOME PAGE: Condensed Performance Table ==========
+  output$home_performance_table <- renderReactable({
+    req(nrow(filtered_data()) > 0)
+
+    data <- filtered_data() %>%
+      select(Index, Asset_Class, `1 Day`, MTD, QTD, YTD, `1 Year`) %>%
+      arrange(Asset_Class, Index)
+
+    # Color styling function for returns
+    return_style <- function(value) {
+      if (is.na(value)) return(NULL)
+      color <- if (value > 0) "#28a745" else if (value < 0) "#dc3545" else "#6c757d"
+      list(color = color, fontWeight = "500")
+    }
+
+    reactable(
+      data,
+      defaultPageSize = 20,
+      highlight = TRUE,
+      bordered = TRUE,
+      striped = TRUE,
+      compact = TRUE,
+      defaultSorted = "YTD",
+      defaultSortOrder = "desc",
+      columns = list(
+        Index = colDef(name = "Index", minWidth = 130,
+                       style = list(fontWeight = "bold", fontSize = "12px")),
+        Asset_Class = colDef(name = "Class", minWidth = 90,
+                             style = list(fontSize = "11px", color = "#6B6B6B")),
+        `1 Day` = colDef(name = "1D", format = colFormat(digits = 2, suffix = "%"),
+                         minWidth = 70, style = return_style, align = "right"),
+        MTD = colDef(name = "MTD", format = colFormat(digits = 2, suffix = "%"),
+                     minWidth = 70, style = return_style, align = "right"),
+        QTD = colDef(name = "QTD", format = colFormat(digits = 2, suffix = "%"),
+                     minWidth = 70, style = return_style, align = "right"),
+        YTD = colDef(name = "YTD", format = colFormat(digits = 2, suffix = "%"),
+                     minWidth = 75, style = function(value) {
+                       if (is.na(value)) return(NULL)
+                       color <- if (value > 0) "#28a745" else if (value < 0) "#dc3545" else "#6c757d"
+                       list(color = color, fontWeight = "bold")
+                     }, align = "right"),
+        `1 Year` = colDef(name = "1Y", format = colFormat(digits = 2, suffix = "%"),
+                          minWidth = 70, style = return_style, align = "right")
+      ),
+      theme = reactableTheme(
+        borderColor = "#dfe2e5",
+        stripedColor = "#f6f8fa",
+        highlightColor = "#f0f5ff",
+        cellPadding = "5px 8px",
+        style = list(fontFamily = "-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif",
+                     fontSize = "12px")
+      )
+    )
+  })
+
+  # ========== DASHBOARD HOME PAGE: Top & Bottom Movers Chart ==========
+  output$home_movers_chart <- renderEcharts4r({
+    req(nrow(filtered_data()) > 0)
+
+    top5 <- filtered_data() %>% slice_max(YTD, n = 5)
+    bottom5 <- filtered_data() %>% slice_min(YTD, n = 5)
+    movers <- bind_rows(top5, bottom5) %>%
+      distinct(Index, .keep_all = TRUE) %>%
+      arrange(YTD) %>%
+      mutate(
+        Positive = ifelse(YTD >= 0, YTD, NA),
+        Negative = ifelse(YTD < 0, YTD, NA)
+      )
+
+    movers %>%
+      e_charts(Index) %>%
+      e_bar(Positive, name = "Positive", stack = "s",
+            itemStyle = list(color = "#28a745")) %>%
+      e_bar(Negative, name = "Negative", stack = "s",
+            itemStyle = list(color = "#dc3545")) %>%
+      e_flip_coords() %>%
+      e_tooltip(trigger = "axis",
+                formatter = htmlwidgets::JS("
+                  function(params){
+                    var val = 0;
+                    for(var i = 0; i < params.length; i++){
+                      if(params[i].value != null && !isNaN(params[i].value)){
+                        val = params[i].value;
+                      }
+                    }
+                    return '<strong>' + params[0].name + '</strong><br/>' +
+                           'YTD: ' + val.toFixed(2) + '%';
+                  }
+                ")) %>%
+      e_y_axis(inverse = FALSE) %>%
+      e_x_axis(
+        axisLabel = list(formatter = '{value}%'),
+        name = "YTD Return (%)",
+        nameLocation = "center",
+        nameGap = 30
+      ) %>%
+      e_legend(show = FALSE) %>%
+      e_grid(left = "30%")
+  })
+
+  # ========== DASHBOARD HOME PAGE: Mini Yield Curve ==========
+  output$home_yield_curve_chart <- renderEcharts4r({
+    data <- yield_curve_data()
+    req(nrow(data) > 0)
+
+    data %>%
+      e_charts(Maturity) %>%
+      e_line(Rate, name = "Yield (%)", smooth = TRUE, symbol_size = 6,
+             areaStyle = list(opacity = 0.15)) %>%
+      e_tooltip(trigger = "axis") %>%
+      e_color(nepc_pal("NEPC Blue")) %>%
+      e_y_axis(
+        name = "Yield (%)",
+        nameLocation = "center",
+        nameGap = 40,
+        axisLabel = list(formatter = '{value}%')
+      ) %>%
+      e_x_axis(
+        axisLabel = list(rotate = 45, fontSize = 10)
+      ) %>%
+      e_legend(show = FALSE) %>%
+      e_grid(bottom = "20%", left = "15%")
+  })
+
+  # ========== DASHBOARD HOME PAGE: Risk/Return Scatter ==========
+  output$home_risk_return_chart <- renderEcharts4r({
+    req(nrow(filtered_data()) > 0)
+
+    as_of <- input$as_of_date
+    ytd_start <- floor_date(as_of, "year")
+
+    vol_data <- map_dfr(filtered_data()$Index, function(idx) {
+      idx_data <- index_data() %>%
+        filter(Index == idx, Date <= as_of)
+
+      return_val <- calc_return(idx_data, ytd_start, as_of)
+      vol_val <- calc_volatility(idx_data, ytd_start, as_of)
+      asset_class <- idx_data$Asset_Class[1]
+
+      data.frame(
+        Index = idx,
+        Return = return_val,
+        Volatility = vol_val,
+        Asset_Class = asset_class,
+        stringsAsFactors = FALSE
+      )
+    })
+
+    req(nrow(vol_data) > 0)
+
+    # Color by asset class
+    asset_colors <- c(
+      "Equity" = "#002060",
+      "Fixed Income" = "#16709E",
+      "Commodity" = "#8CC94A",
+      "Currency" = "#F2CC73",
+      "Alternative" = "#6ED0F7"
+    )
+
+    vol_data %>%
+      group_by(Asset_Class) %>%
+      e_charts(Volatility) %>%
+      e_scatter(Return, symbol_size = 14) %>%
+      e_tooltip(
+        trigger = "item",
+        formatter = htmlwidgets::JS("
+          function(params){
+            return '<strong>' + params.seriesName + '</strong><br/>' +
+                   'Volatility: ' + params.value[0].toFixed(2) + '%<br/>' +
+                   'YTD Return: ' + params.value[1].toFixed(2) + '%';
+          }
+        ")
+      ) %>%
+      e_x_axis(
+        name = "Annualized Volatility (%)",
+        nameLocation = "center",
+        nameGap = 30,
+        axisLabel = list(formatter = '{value}%')
+      ) %>%
+      e_y_axis(
+        name = "YTD Return (%)",
+        nameLocation = "center",
+        nameGap = 45,
+        axisLabel = list(formatter = '{value}%')
+      ) %>%
+      e_legend(top = "top", textStyle = list(fontSize = 10)) %>%
+      e_color(unname(asset_colors))
+  })
+
+  # ========== DASHBOARD HOME PAGE: Technical Signals Summary Table ==========
+  output$home_signals_table <- renderReactable({
+    data <- index_data()
+    req(nrow(data) > 0)
+
+    as_of <- input$as_of_date
+
+    scorecard <- map_dfr(unique(data$Index), function(idx) {
+      idx_data <- data %>%
+        filter(Index == idx, Date <= as_of) %>%
+        arrange(Date)
+
+      n <- nrow(idx_data)
+      if (n < 50) return(NULL)
+
+      price <- idx_data$Price
+      current_price <- tail(price, 1)
+
+      sma50  <- mean(tail(price, 50))
+      sma200 <- if (n >= 200) mean(tail(price, 200)) else NA_real_
+
+      rsi_vals <- calc_rsi(price, 14)
+      rsi_current <- tail(rsi_vals[!is.na(rsi_vals)], 1)
+      if (length(rsi_current) == 0) rsi_current <- NA_real_
+
+      pct_vs_sma50  <- (current_price / sma50 - 1) * 100
+      pct_vs_sma200 <- if (!is.na(sma200)) (current_price / sma200 - 1) * 100 else NA_real_
+
+      trend <- if (!is.na(sma200)) {
+        if (sma50 > sma200) "Bullish" else "Bearish"
+      } else { "N/A" }
+
+      score <- 0
+      if (!is.na(rsi_current)) {
+        if (rsi_current < 30) score <- score + 2
+        else if (rsi_current < 50) score <- score + 1
+        else if (rsi_current > 70) score <- score - 2
+        else if (rsi_current > 50) score <- score - 1
+      }
+      if (!is.na(pct_vs_sma50))  score <- score + sign(pct_vs_sma50)
+      if (!is.na(pct_vs_sma200)) score <- score + sign(pct_vs_sma200)
+      if (trend == "Bullish") score <- score + 1
+      if (trend == "Bearish") score <- score - 1
+
+      signal <- if (score >= 3) "Strong Buy"
+        else if (score >= 1) "Buy"
+        else if (score <= -3) "Strong Sell"
+        else if (score <= -1) "Sell"
+        else "Neutral"
+
+      data.frame(
+        Index = idx,
+        RSI = round(rsi_current, 0),
+        Trend = trend,
+        Signal = signal,
+        stringsAsFactors = FALSE,
+        check.names = FALSE
+      )
+    })
+
+    if (!is.null(input$asset_class_filter)) {
+      idx_classes <- index_data() %>%
+        select(Index, Asset_Class) %>%
+        distinct()
+      scorecard <- scorecard %>%
+        left_join(idx_classes, by = "Index") %>%
+        filter(Asset_Class %in% input$asset_class_filter) %>%
+        select(-Asset_Class)
+    }
+
+    signal_color <- function(value) {
+      if (is.na(value)) return(NULL)
+      bg <- switch(value,
+        "Strong Buy"  = "#28a745",
+        "Buy"         = "#8CC94A",
+        "Neutral"     = "#ffc107",
+        "Sell"        = "#fd7e14",
+        "Strong Sell" = "#dc3545",
+        "#6c757d"
+      )
+      fg <- if (value %in% c("Neutral")) "#000" else "#fff"
+      list(background = bg, color = fg, fontWeight = "bold", textAlign = "center",
+           borderRadius = "4px", padding = "2px 6px", fontSize = "11px")
+    }
+
+    reactable(
+      scorecard,
+      defaultPageSize = 20,
+      bordered = TRUE,
+      striped = TRUE,
+      compact = TRUE,
+      highlight = TRUE,
+      defaultSorted = "Signal",
+      columns = list(
+        Index = colDef(name = "Index", minWidth = 120,
+                       style = list(fontWeight = "bold", fontSize = "12px")),
+        RSI = colDef(name = "RSI", minWidth = 55,
+          style = function(value) {
+            if (is.na(value)) return(NULL)
+            color <- if (value > 70) "#dc3545" else if (value < 30) "#28a745" else "#6c757d"
+            list(color = color, fontWeight = "bold", fontSize = "12px", textAlign = "center")
+          }
+        ),
+        Trend = colDef(name = "Trend", minWidth = 70,
+          style = function(value) {
+            color <- if (value == "Bullish") "#28a745" else if (value == "Bearish") "#dc3545" else "#6c757d"
+            list(color = color, fontWeight = "600", fontSize = "12px")
+          }
+        ),
+        Signal = colDef(name = "Signal", minWidth = 90, style = signal_color)
+      ),
+      theme = reactableTheme(
+        borderColor = "#dfe2e5",
+        stripedColor = "#f6f8fa",
+        highlightColor = "#f0f5ff",
+        cellPadding = "4px 8px",
+        style = list(fontFamily = "-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif",
+                     fontSize = "12px")
+      )
     )
   })
   
@@ -1016,6 +1477,55 @@ server <- function(input, output, session) {
             if (is.na(value)) return(NULL)
             color <- if (value > 0) "#28a745" else if (value < 0) "#dc3545" else "#6c757d"
             list(color = color, fontWeight = "500")
+          }
+        ),
+        `Ann. Return` = colDef(
+          name = "Ann. Ret",
+          format = colFormat(digits = 2, suffix = "%"),
+          aggregate = "mean",
+          minWidth = 90,
+          style = function(value) {
+            if (is.na(value)) return(NULL)
+            color <- if (value > 0) "#28a745" else if (value < 0) "#dc3545" else "#6c757d"
+            list(color = color, fontWeight = "500")
+          }
+        ),
+        `Ann. Volatility` = colDef(
+          name = "Ann. Vol",
+          format = colFormat(digits = 2, suffix = "%"),
+          aggregate = "mean",
+          minWidth = 90,
+          style = list(color = "#6B6B6B")
+        ),
+        `Sharpe Ratio` = colDef(
+          name = "Sharpe",
+          format = colFormat(digits = 2),
+          aggregate = "mean",
+          minWidth = 80,
+          style = function(value) {
+            if (is.na(value)) return(NULL)
+            color <- if (value > 1) "#28a745" else if (value > 0) "#6c757d" else "#dc3545"
+            list(color = color, fontWeight = "500")
+          }
+        ),
+        `Max Drawdown` = colDef(
+          name = "Max DD",
+          format = colFormat(digits = 2, suffix = "%"),
+          aggregate = "mean",
+          minWidth = 85,
+          style = function(value) {
+            if (is.na(value)) return(NULL)
+            list(color = "#dc3545", fontWeight = "500")
+          }
+        ),
+        Beta = colDef(
+          name = "Beta",
+          format = colFormat(digits = 2),
+          aggregate = "mean",
+          minWidth = 70,
+          style = function(value) {
+            if (is.na(value)) return(NULL)
+            list(color = "#6B6B6B")
           }
         )
       ),
